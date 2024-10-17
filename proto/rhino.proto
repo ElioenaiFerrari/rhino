@@ -1,0 +1,35 @@
+syntax="proto3";
+
+package rhino;
+
+message Error {
+  string message = 1;
+  string code = 2;
+}
+
+message SubscriptionRequest {
+  string topic = 1;
+}
+
+message SubscriptionResponse {
+  string topic = 1;
+  bytes data = 2;
+  Error error = 3;
+}
+
+message PublishRequest {
+  string topic = 1;
+  bytes data = 2;
+  int32 ttl = 3;
+  bool persistent = 4;
+}
+
+message PublishResponse {
+  string topic = 1;
+  Error error = 2;
+}
+
+service Rhino {
+  rpc Subscribe(SubscriptionRequest) returns (stream SubscriptionResponse);
+  rpc Publish(PublishRequest) returns (PublishResponse);
+}
