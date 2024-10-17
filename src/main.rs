@@ -3,9 +3,11 @@ use std::{pin::Pin, time::Duration};
 use dotenv::dotenv;
 use moka::sync::Cache;
 use pb::{rhino_server::Rhino, SubscriptionResponse};
+use prost::Message;
 use tokio::sync::mpsc;
 use tokio_stream::{wrappers::ReceiverStream, Stream, StreamExt};
 use tonic::{self, transport::Server};
+use uuid::Uuid;
 
 pub mod pb {
     use tonic::include_proto;
@@ -26,8 +28,10 @@ impl Rhino for RhinoServer {
         let topic = request.get_ref().topic.clone();
 
         if self.cache.contains_key(&topic) {
+            let id = Uuid::now_v7().to_string();
             let mut messages = self.cache.get(&topic).unwrap().clone();
             let message = pb::SubscriptionResponse {
+                id: id.clone(),
                 topic: topic.clone(),
                 data: request.get_ref().data.clone(),
                 ..Default::default()
@@ -36,11 +40,14 @@ impl Rhino for RhinoServer {
             self.cache.insert(topic.clone(), messages);
 
             Ok(tonic::Response::new(pb::PublishResponse {
+                id: id,
                 topic: topic,
                 ..Default::default()
             }))
         } else {
+            let id = Uuid::now_v7().to_string();
             let message = pb::SubscriptionResponse {
+                id: id.clone(),
                 topic: topic.clone(),
                 data: request.get_ref().data.clone(),
                 ..Default::default()
@@ -48,6 +55,7 @@ impl Rhino for RhinoServer {
             self.cache.insert(topic.clone(), vec![message]);
 
             Ok(tonic::Response::new(pb::PublishResponse {
+                id: id,
                 topic: topic,
                 ..Default::default()
             }))

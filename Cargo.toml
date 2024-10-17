@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+base64 = "0.22.1"
 dotenv = "0.15.0"
 moka = { version = "0.12.8", features = ["sync"] }
 prost = "0.13.3"
@@ -12,6 +13,7 @@ tokio = { version = "1.40.0", features = ["full"] }
 tokio-stream = { version = "0.1.16", features = ["full"] }
 tonic = "0.12.3"
 tonic-build = "0.12.3"
+uuid = { version = "1.11.0", features = ["v7"] }
 
 [build-dependencies]
 tonic-build = "0.12.3"

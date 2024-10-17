@@ -12,9 +12,10 @@ message SubscriptionRequest {
 }
 
 message SubscriptionResponse {
-  string topic = 1;
-  bytes data = 2;
-  Error error = 3;
+  string id = 1;
+  string topic = 2;
+  bytes data = 3;
+  Error error = 4;
 }
 
 message PublishRequest {
@@ -25,8 +26,9 @@ message PublishRequest {
 }
 
 message PublishResponse {
-  string topic = 1;
-  Error error = 2;
+  string id = 1;
+  string topic = 2;
+  Error error = 3;
 }
 
 service Rhino {
