@@ -1,9 +1,12 @@
-use std::{pin::Pin, time::Duration};
+use std::{
+    pin::Pin,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 
 use dotenv::dotenv;
 use moka::sync::Cache;
 use pb::{rhino_server::Rhino, SubscriptionResponse};
-use prost::Message;
 use tokio::sync::mpsc;
 use tokio_stream::{wrappers::ReceiverStream, Stream, StreamExt};
 use tonic::{self, transport::Server};
@@ -22,7 +25,7 @@ pub struct Data {
 }
 
 struct RhinoServer {
-    pub cache: Cache<String, Data>,
+    pub cache: Arc<Mutex<Cache<String, Data>>>,
 }
 
 #[tonic::async_trait]
@@ -32,10 +35,11 @@ impl Rhino for RhinoServer {
         request: tonic::Request<pb::PublishRequest>,
     ) -> Result<tonic::Response<pb::PublishResponse>, tonic::Status> {
         let topic = request.get_ref().topic.clone();
+        let cache = self.cache.lock().unwrap();
 
-        if self.cache.contains_key(&topic) {
+        if cache.contains_key(&topic) {
             let id = Uuid::now_v7().to_string();
-            let mut data = self.cache.get(&topic).unwrap().clone();
+            let mut data = cache.get(&topic).unwrap().clone();
             let message = pb::SubscriptionResponse {
                 id: id.clone(),
                 topic: topic.clone(),
@@ -44,7 +48,7 @@ impl Rhino for RhinoServer {
             };
 
             data.messages.push(message);
-            self.cache.insert(topic.clone(), data);
+            cache.insert(topic.clone(), data);
 
             Ok(tonic::Response::new(pb::PublishResponse {
                 id: id,
@@ -59,7 +63,7 @@ impl Rhino for RhinoServer {
                 data: request.get_ref().data.clone(),
                 ..Default::default()
             };
-            self.cache.insert(
+            cache.insert(
                 topic.clone(),
                 Data {
                     messages: vec![message],
@@ -82,22 +86,33 @@ impl Rhino for RhinoServer {
         &self,
         request: tonic::Request<pb::SubscriptionRequest>,
     ) -> Result<tonic::Response<Self::SubscribeStream>, tonic::Status> {
-        let repeat = self
-            .cache
+        let cache = self.cache.lock().unwrap();
+        let repeat = cache
             .get(&request.get_ref().topic)
             .unwrap_or(Data {
                 messages: vec![],
                 offset: 0,
             })
             .clone();
-        let mut stream = Box::pin(tokio_stream::iter(repeat.messages.into_iter().skip(repeat.offset)).throttle(Duration::from_secs(1)));
+        let mut stream = Box::pin(
+            tokio_stream::iter(repeat.messages.clone().into_iter().skip(repeat.offset))
+                .throttle(Duration::from_millis(200)),
+        );
 
         let (tx, rx) = mpsc::channel(128);
+        let cache = self.cache.clone();
         tokio::spawn(async move {
             loop {
                 if let Some(item) = stream.next().await {
                     match tx.send(Ok(item.clone())).await {
-                        Ok(_) => {}
+                        Ok(_) => {
+                            let mut data = repeat.clone();
+                            data.offset += 1;
+                            cache
+                                .lock()
+                                .unwrap()
+                                .insert(request.get_ref().topic.clone(), data);
+                        }
                         Err(_item) => {
                             // output_stream was build from rx and both are dropped
                             break;
@@ -118,7 +133,7 @@ impl Rhino for RhinoServer {
 async fn main() -> tonic::Result<(), Box<dyn std::error::Error>> {
     dotenv().ok();
 
-    let cache = Cache::new(10_000);
+    let cache = Arc::new(Mutex::new(Cache::new(10_000)));
 
     Server::builder()
         .add_service(pb::rhino_server::RhinoServer::new(RhinoServer { cache }))
