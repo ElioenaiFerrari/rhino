@@ -15,8 +15,14 @@ pub mod pb {
     include_proto!("rhino");
 }
 
+#[derive(Debug, Clone)]
+pub struct Data {
+    pub messages: Vec<SubscriptionResponse>,
+    pub offset: usize,
+}
+
 struct RhinoServer {
-    pub cache: Cache<String, Vec<SubscriptionResponse>>,
+    pub cache: Cache<String, Data>,
 }
 
 #[tonic::async_trait]
@@ -29,15 +35,16 @@ impl Rhino for RhinoServer {
 
         if self.cache.contains_key(&topic) {
             let id = Uuid::now_v7().to_string();
-            let mut messages = self.cache.get(&topic).unwrap().clone();
+            let mut data = self.cache.get(&topic).unwrap().clone();
             let message = pb::SubscriptionResponse {
                 id: id.clone(),
                 topic: topic.clone(),
                 data: request.get_ref().data.clone(),
                 ..Default::default()
             };
-            messages.push(message);
-            self.cache.insert(topic.clone(), messages);
+
+            data.messages.push(message);
+            self.cache.insert(topic.clone(), data);
 
             Ok(tonic::Response::new(pb::PublishResponse {
                 id: id,
@@ -52,7 +59,13 @@ impl Rhino for RhinoServer {
                 data: request.get_ref().data.clone(),
                 ..Default::default()
             };
-            self.cache.insert(topic.clone(), vec![message]);
+            self.cache.insert(
+                topic.clone(),
+                Data {
+                    messages: vec![message],
+                    offset: 0,
+                },
+            );
 
             Ok(tonic::Response::new(pb::PublishResponse {
                 id: id,
@@ -72,15 +85,18 @@ impl Rhino for RhinoServer {
         let repeat = self
             .cache
             .get(&request.get_ref().topic)
-            .unwrap_or(vec![])
+            .unwrap_or(Data {
+                messages: vec![],
+                offset: 0,
+            })
             .clone();
-        let mut stream = Box::pin(tokio_stream::iter(repeat).throttle(Duration::from_millis(200)));
+        let mut stream = Box::pin(tokio_stream::iter(repeat.messages.into_iter().skip(repeat.offset)).throttle(Duration::from_secs(1)));
 
         let (tx, rx) = mpsc::channel(128);
         tokio::spawn(async move {
             loop {
                 if let Some(item) = stream.next().await {
-                    match tx.send(Ok(item)).await {
+                    match tx.send(Ok(item.clone())).await {
                         Ok(_) => {}
                         Err(_item) => {
                             // output_stream was build from rx and both are dropped
