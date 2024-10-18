@@ -35,6 +35,8 @@ const (
 const (
 	// RhinoSubscribeProcedure is the fully-qualified name of the Rhino's Subscribe RPC.
 	RhinoSubscribeProcedure = "/rhino.Rhino/Subscribe"
+	// RhinoAckProcedure is the fully-qualified name of the Rhino's Ack RPC.
+	RhinoAckProcedure = "/rhino.Rhino/Ack"
 	// RhinoPublishProcedure is the fully-qualified name of the Rhino's Publish RPC.
 	RhinoPublishProcedure = "/rhino.Rhino/Publish"
 )
@@ -43,12 +45,14 @@ const (
 var (
 	rhinoServiceDescriptor         = _go.File_rhino_proto.Services().ByName("Rhino")
 	rhinoSubscribeMethodDescriptor = rhinoServiceDescriptor.Methods().ByName("Subscribe")
+	rhinoAckMethodDescriptor       = rhinoServiceDescriptor.Methods().ByName("Ack")
 	rhinoPublishMethodDescriptor   = rhinoServiceDescriptor.Methods().ByName("Publish")
 )
 
 // RhinoClient is a client for the rhino.Rhino service.
 type RhinoClient interface {
 	Subscribe(context.Context, *connect.Request[_go.SubscriptionRequest]) (*connect.ServerStreamForClient[_go.SubscriptionResponse], error)
+	Ack(context.Context, *connect.Request[_go.AckRequest]) (*connect.Response[_go.AckResponse], error)
 	Publish(context.Context, *connect.Request[_go.PublishRequest]) (*connect.Response[_go.PublishResponse], error)
 }
 
@@ -68,6 +72,12 @@ func NewRhinoClient(httpClient connect.HTTPClient, baseURL string, opts ...conne
 			connect.WithSchema(rhinoSubscribeMethodDescriptor),
 			connect.WithClientOptions(opts...),
 		),
+		ack: connect.NewClient[_go.AckRequest, _go.AckResponse](
+			httpClient,
+			baseURL+RhinoAckProcedure,
+			connect.WithSchema(rhinoAckMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
 		publish: connect.NewClient[_go.PublishRequest, _go.PublishResponse](
 			httpClient,
 			baseURL+RhinoPublishProcedure,
@@ -80,12 +90,18 @@ func NewRhinoClient(httpClient connect.HTTPClient, baseURL string, opts ...conne
 // rhinoClient implements RhinoClient.
 type rhinoClient struct {
 	subscribe *connect.Client[_go.SubscriptionRequest, _go.SubscriptionResponse]
+	ack       *connect.Client[_go.AckRequest, _go.AckResponse]
 	publish   *connect.Client[_go.PublishRequest, _go.PublishResponse]
 }
 
 // Subscribe calls rhino.Rhino.Subscribe.
 func (c *rhinoClient) Subscribe(ctx context.Context, req *connect.Request[_go.SubscriptionRequest]) (*connect.ServerStreamForClient[_go.SubscriptionResponse], error) {
 	return c.subscribe.CallServerStream(ctx, req)
+}
+
+// Ack calls rhino.Rhino.Ack.
+func (c *rhinoClient) Ack(ctx context.Context, req *connect.Request[_go.AckRequest]) (*connect.Response[_go.AckResponse], error) {
+	return c.ack.CallUnary(ctx, req)
 }
 
 // Publish calls rhino.Rhino.Publish.
@@ -96,6 +112,7 @@ func (c *rhinoClient) Publish(ctx context.Context, req *connect.Request[_go.Publ
 // RhinoHandler is an implementation of the rhino.Rhino service.
 type RhinoHandler interface {
 	Subscribe(context.Context, *connect.Request[_go.SubscriptionRequest], *connect.ServerStream[_go.SubscriptionResponse]) error
+	Ack(context.Context, *connect.Request[_go.AckRequest]) (*connect.Response[_go.AckResponse], error)
 	Publish(context.Context, *connect.Request[_go.PublishRequest]) (*connect.Response[_go.PublishResponse], error)
 }
 
@@ -111,6 +128,12 @@ func NewRhinoHandler(svc RhinoHandler, opts ...connect.HandlerOption) (string, h
 		connect.WithSchema(rhinoSubscribeMethodDescriptor),
 		connect.WithHandlerOptions(opts...),
 	)
+	rhinoAckHandler := connect.NewUnaryHandler(
+		RhinoAckProcedure,
+		svc.Ack,
+		connect.WithSchema(rhinoAckMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
 	rhinoPublishHandler := connect.NewUnaryHandler(
 		RhinoPublishProcedure,
 		svc.Publish,
@@ -121,6 +144,8 @@ func NewRhinoHandler(svc RhinoHandler, opts ...connect.HandlerOption) (string, h
 		switch r.URL.Path {
 		case RhinoSubscribeProcedure:
 			rhinoSubscribeHandler.ServeHTTP(w, r)
+		case RhinoAckProcedure:
+			rhinoAckHandler.ServeHTTP(w, r)
 		case RhinoPublishProcedure:
 			rhinoPublishHandler.ServeHTTP(w, r)
 		default:
@@ -134,6 +159,10 @@ type UnimplementedRhinoHandler struct{}
 
 func (UnimplementedRhinoHandler) Subscribe(context.Context, *connect.Request[_go.SubscriptionRequest], *connect.ServerStream[_go.SubscriptionResponse]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("rhino.Rhino.Subscribe is not implemented"))
+}
+
+func (UnimplementedRhinoHandler) Ack(context.Context, *connect.Request[_go.AckRequest]) (*connect.Response[_go.AckResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("rhino.Rhino.Ack is not implemented"))
 }
 
 func (UnimplementedRhinoHandler) Publish(context.Context, *connect.Request[_go.PublishRequest]) (*connect.Response[_go.PublishResponse], error) {

@@ -2,6 +2,7 @@ use std::{
     pin::Pin,
     sync::{Arc, Mutex},
     time::Duration,
+    vec,
 };
 
 use dotenv::dotenv;
@@ -18,18 +19,41 @@ pub mod pb {
     include_proto!("rhino");
 }
 
-#[derive(Debug, Clone)]
-pub struct Data {
-    pub messages: Vec<SubscriptionResponse>,
-    pub offset: usize,
-}
-
 struct RhinoServer {
-    pub cache: Arc<Mutex<Cache<String, Data>>>,
+    pub cache: Arc<Mutex<Cache<String, Vec<SubscriptionResponse>>>>,
 }
 
 #[tonic::async_trait]
 impl Rhino for RhinoServer {
+    async fn ack(
+        &self,
+        request: tonic::Request<pb::AckRequest>,
+    ) -> Result<tonic::Response<pb::AckResponse>, tonic::Status> {
+        let topic = request.get_ref().topic.clone();
+        let id = request.get_ref().id.clone();
+        let cache = self.cache.lock().unwrap();
+
+        if cache.contains_key(&topic) {
+            let mut messages = cache.get(&topic).unwrap().clone();
+            let index = messages.iter().position(|x| x.id == id);
+
+            if let Some(index) = index {
+                messages.remove(index);
+                cache.insert(topic.clone(), messages);
+
+                Ok(tonic::Response::new(pb::AckResponse {
+                    id: id,
+                    topic: topic,
+                    ..Default::default()
+                }))
+            } else {
+                Err(tonic::Status::not_found("Message not found"))
+            }
+        } else {
+            Err(tonic::Status::not_found("Topic not found"))
+        }
+    }
+
     async fn publish(
         &self,
         request: tonic::Request<pb::PublishRequest>,
@@ -39,7 +63,7 @@ impl Rhino for RhinoServer {
 
         if cache.contains_key(&topic) {
             let id = Uuid::now_v7().to_string();
-            let mut data = cache.get(&topic).unwrap().clone();
+            let mut messages = cache.get(&topic).unwrap();
             let message = pb::SubscriptionResponse {
                 id: id.clone(),
                 topic: topic.clone(),
@@ -47,8 +71,7 @@ impl Rhino for RhinoServer {
                 ..Default::default()
             };
 
-            data.messages.push(message);
-            cache.insert(topic.clone(), data);
+            messages.push(message);
 
             Ok(tonic::Response::new(pb::PublishResponse {
                 id: id,
@@ -63,13 +86,7 @@ impl Rhino for RhinoServer {
                 data: request.get_ref().data.clone(),
                 ..Default::default()
             };
-            cache.insert(
-                topic.clone(),
-                Data {
-                    messages: vec![message],
-                    offset: 0,
-                },
-            );
+            cache.insert(topic.clone(), vec![message]);
 
             Ok(tonic::Response::new(pb::PublishResponse {
                 id: id,
@@ -89,34 +106,19 @@ impl Rhino for RhinoServer {
         let cache = self.cache.lock().unwrap();
         let repeat = cache
             .get(&request.get_ref().topic)
-            .unwrap_or(Data {
-                messages: vec![],
-                offset: 0,
-            })
+            .unwrap_or(vec![])
             .clone();
-        let mut stream = Box::pin(
-            tokio_stream::iter(repeat.messages.clone().into_iter().skip(repeat.offset))
-                .throttle(Duration::from_millis(200)),
-        );
+        let mut stream =
+            Box::pin(tokio_stream::iter(repeat.clone()).throttle(Duration::from_millis(200)));
 
         let (tx, rx) = mpsc::channel(128);
-        let cache = self.cache.clone();
         tokio::spawn(async move {
-            loop {
-                if let Some(item) = stream.next().await {
-                    match tx.send(Ok(item.clone())).await {
-                        Ok(_) => {
-                            let mut data = repeat.clone();
-                            data.offset += 1;
-                            cache
-                                .lock()
-                                .unwrap()
-                                .insert(request.get_ref().topic.clone(), data);
-                        }
-                        Err(_item) => {
-                            // output_stream was build from rx and both are dropped
-                            break;
-                        }
+            while let Some(item) = stream.next().await {
+                match tx.send(Ok(item.clone())).await {
+                    Ok(_) => {}
+                    Err(_item) => {
+                        // output_stream was build from rx and both are dropped
+                        break;
                     }
                 }
             }

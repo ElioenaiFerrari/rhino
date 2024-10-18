@@ -31,7 +31,19 @@ message PublishResponse {
   Error error = 3;
 }
 
+message AckRequest {
+  string topic = 1;
+  string id = 2;
+}
+
+message AckResponse {
+  string id = 1;
+  string topic = 2;
+  Error error = 3;
+}
+
 service Rhino {
   rpc Subscribe(SubscriptionRequest) returns (stream SubscriptionResponse);
+  rpc Ack(AckRequest) returns (AckResponse);
   rpc Publish(PublishRequest) returns (PublishResponse);
 }
