@@ -16,6 +16,4 @@ func main() {
 		Topic: "topic",
 	}
 
-	rhinov1connect.Publish(&publishRequest)
-
 }
