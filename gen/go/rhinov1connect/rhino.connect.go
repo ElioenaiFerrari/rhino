@@ -2,7 +2,7 @@
 //
 // Source: rhino.proto
 
-package _goconnect
+package rhinov1connect
 
 import (
 	connect "connectrpc.com/connect"
@@ -22,7 +22,7 @@ const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// RhinoName is the fully-qualified name of the Rhino service.
-	RhinoName = "rhino.Rhino"
+	RhinoName = "rhino.v1.Rhino"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -34,11 +34,11 @@ const (
 // period.
 const (
 	// RhinoSubscribeProcedure is the fully-qualified name of the Rhino's Subscribe RPC.
-	RhinoSubscribeProcedure = "/rhino.Rhino/Subscribe"
+	RhinoSubscribeProcedure = "/rhino.v1.Rhino/Subscribe"
 	// RhinoAckProcedure is the fully-qualified name of the Rhino's Ack RPC.
-	RhinoAckProcedure = "/rhino.Rhino/Ack"
+	RhinoAckProcedure = "/rhino.v1.Rhino/Ack"
 	// RhinoPublishProcedure is the fully-qualified name of the Rhino's Publish RPC.
-	RhinoPublishProcedure = "/rhino.Rhino/Publish"
+	RhinoPublishProcedure = "/rhino.v1.Rhino/Publish"
 )
 
 // These variables are the protoreflect.Descriptor objects for the RPCs defined in this package.
@@ -49,16 +49,16 @@ var (
 	rhinoPublishMethodDescriptor   = rhinoServiceDescriptor.Methods().ByName("Publish")
 )
 
-// RhinoClient is a client for the rhino.Rhino service.
+// RhinoClient is a client for the rhino.v1.Rhino service.
 type RhinoClient interface {
 	Subscribe(context.Context, *connect.Request[_go.SubscriptionRequest]) (*connect.ServerStreamForClient[_go.SubscriptionResponse], error)
 	Ack(context.Context, *connect.Request[_go.AckRequest]) (*connect.Response[_go.AckResponse], error)
 	Publish(context.Context, *connect.Request[_go.PublishRequest]) (*connect.Response[_go.PublishResponse], error)
 }
 
-// NewRhinoClient constructs a client for the rhino.Rhino service. By default, it uses the Connect
-// protocol with the binary Protobuf Codec, asks for gzipped responses, and sends uncompressed
-// requests. To use the gRPC or gRPC-Web protocols, supply the connect.WithGRPC() or
+// NewRhinoClient constructs a client for the rhino.v1.Rhino service. By default, it uses the
+// Connect protocol with the binary Protobuf Codec, asks for gzipped responses, and sends
+// uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the connect.WithGRPC() or
 // connect.WithGRPCWeb() options.
 //
 // The URL supplied here should be the base URL for the Connect or gRPC server (for example,
@@ -94,22 +94,22 @@ type rhinoClient struct {
 	publish   *connect.Client[_go.PublishRequest, _go.PublishResponse]
 }
 
-// Subscribe calls rhino.Rhino.Subscribe.
+// Subscribe calls rhino.v1.Rhino.Subscribe.
 func (c *rhinoClient) Subscribe(ctx context.Context, req *connect.Request[_go.SubscriptionRequest]) (*connect.ServerStreamForClient[_go.SubscriptionResponse], error) {
 	return c.subscribe.CallServerStream(ctx, req)
 }
 
-// Ack calls rhino.Rhino.Ack.
+// Ack calls rhino.v1.Rhino.Ack.
 func (c *rhinoClient) Ack(ctx context.Context, req *connect.Request[_go.AckRequest]) (*connect.Response[_go.AckResponse], error) {
 	return c.ack.CallUnary(ctx, req)
 }
 
-// Publish calls rhino.Rhino.Publish.
+// Publish calls rhino.v1.Rhino.Publish.
 func (c *rhinoClient) Publish(ctx context.Context, req *connect.Request[_go.PublishRequest]) (*connect.Response[_go.PublishResponse], error) {
 	return c.publish.CallUnary(ctx, req)
 }
 
-// RhinoHandler is an implementation of the rhino.Rhino service.
+// RhinoHandler is an implementation of the rhino.v1.Rhino service.
 type RhinoHandler interface {
 	Subscribe(context.Context, *connect.Request[_go.SubscriptionRequest], *connect.ServerStream[_go.SubscriptionResponse]) error
 	Ack(context.Context, *connect.Request[_go.AckRequest]) (*connect.Response[_go.AckResponse], error)
@@ -140,7 +140,7 @@ func NewRhinoHandler(svc RhinoHandler, opts ...connect.HandlerOption) (string, h
 		connect.WithSchema(rhinoPublishMethodDescriptor),
 		connect.WithHandlerOptions(opts...),
 	)
-	return "/rhino.Rhino/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return "/rhino.v1.Rhino/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case RhinoSubscribeProcedure:
 			rhinoSubscribeHandler.ServeHTTP(w, r)
@@ -158,13 +158,13 @@ func NewRhinoHandler(svc RhinoHandler, opts ...connect.HandlerOption) (string, h
 type UnimplementedRhinoHandler struct{}
 
 func (UnimplementedRhinoHandler) Subscribe(context.Context, *connect.Request[_go.SubscriptionRequest], *connect.ServerStream[_go.SubscriptionResponse]) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("rhino.Rhino.Subscribe is not implemented"))
+	return connect.NewError(connect.CodeUnimplemented, errors.New("rhino.v1.Rhino.Subscribe is not implemented"))
 }
 
 func (UnimplementedRhinoHandler) Ack(context.Context, *connect.Request[_go.AckRequest]) (*connect.Response[_go.AckResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("rhino.Rhino.Ack is not implemented"))
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("rhino.v1.Rhino.Ack is not implemented"))
 }
 
 func (UnimplementedRhinoHandler) Publish(context.Context, *connect.Request[_go.PublishRequest]) (*connect.Response[_go.PublishResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("rhino.Rhino.Publish is not implemented"))
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("rhino.v1.Rhino.Publish is not implemented"))
 }

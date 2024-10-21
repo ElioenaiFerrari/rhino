@@ -16,7 +16,7 @@ use uuid::Uuid;
 pub mod pb {
     use tonic::include_proto;
 
-    include_proto!("rhino");
+    include_proto!("rhino.v1");
 }
 
 struct RhinoServer {
