@@ -2,6 +2,7 @@ package main
 
 import (
 	pb "github.com/ElioenaiFerrari/rhino/gen/go"
+	"google.golang.org/grpc"
 )
 
 func main() {
@@ -16,4 +17,15 @@ func main() {
 		Topic: "topic",
 	}
 
+	conn, err := grpc.Dial("localhost:50051", grpc.WithInsecure())
+	if err != nil {
+		panic(err)
+	}
+
+	client := pb.NewRhinoClient(conn)
+
+	_, err = client.Publish(nil, &publishRequest)
+	if err != nil {
+		panic(err)
+	}
 }
