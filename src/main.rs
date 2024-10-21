@@ -31,15 +31,14 @@ impl Rhino for RhinoServer {
     ) -> Result<tonic::Response<pb::AckResponse>, tonic::Status> {
         let topic = request.get_ref().topic.clone();
         let id = request.get_ref().id.clone();
-        let cache = self.cache.lock().unwrap();
 
-        if cache.contains_key(&topic) {
-            let mut messages = cache.get(&topic).unwrap().clone();
+        if self.cache.lock().unwrap().contains_key(&topic) {
+            let mut messages = self.cache.lock().unwrap().get(&topic).unwrap().clone();
             let index = messages.iter().position(|x| x.id == id);
 
             if let Some(index) = index {
                 messages.remove(index);
-                cache.insert(topic.clone(), messages);
+                self.cache.lock().unwrap().insert(topic.clone(), messages);
 
                 Ok(tonic::Response::new(pb::AckResponse {
                     id: id,
@@ -59,11 +58,10 @@ impl Rhino for RhinoServer {
         request: tonic::Request<pb::PublishRequest>,
     ) -> Result<tonic::Response<pb::PublishResponse>, tonic::Status> {
         let topic = request.get_ref().topic.clone();
-        let cache = self.cache.lock().unwrap();
 
-        if cache.contains_key(&topic) {
+        if self.cache.lock().unwrap().contains_key(&topic) {
             let id = Uuid::now_v7().to_string();
-            let mut messages = cache.get(&topic).unwrap();
+            let mut messages = self.cache.lock().unwrap().get(&topic).unwrap();
             let message = pb::SubscriptionResponse {
                 id: id.clone(),
                 topic: topic.clone(),
@@ -72,6 +70,11 @@ impl Rhino for RhinoServer {
             };
 
             messages.push(message);
+
+            self.cache
+                .lock()
+                .unwrap()
+                .insert(topic.clone(), messages.clone());
 
             Ok(tonic::Response::new(pb::PublishResponse {
                 id: id,
@@ -86,7 +89,10 @@ impl Rhino for RhinoServer {
                 data: request.get_ref().data.clone(),
                 ..Default::default()
             };
-            cache.insert(topic.clone(), vec![message]);
+            self.cache
+                .lock()
+                .unwrap()
+                .insert(topic.clone(), vec![message]);
 
             Ok(tonic::Response::new(pb::PublishResponse {
                 id: id,
@@ -103,8 +109,10 @@ impl Rhino for RhinoServer {
         &self,
         request: tonic::Request<pb::SubscriptionRequest>,
     ) -> Result<tonic::Response<Self::SubscribeStream>, tonic::Status> {
-        let cache = self.cache.lock().unwrap();
-        let repeat = cache
+        let repeat = self
+            .cache
+            .lock()
+            .unwrap()
             .get(&request.get_ref().topic)
             .unwrap_or(vec![])
             .clone();
@@ -117,7 +125,7 @@ impl Rhino for RhinoServer {
                 match tx.send(Ok(item.clone())).await {
                     Ok(_) => {}
                     Err(_item) => {
-                        // output_stream was build from rx and both are dropped
+                        println!("Error sending message");
                         break;
                     }
                 }
